@@ -6,8 +6,9 @@ const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const peso = value => '₱' + Number(value || 0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
 const dateLabel = value => value ? new Date(value+'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
+const localDateKey = (date=new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 function toast(message){ const el=$('toast'); el.textContent=message; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2600); }
-function go(view){ activeView=view; document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id==='view-'+view)); document.querySelectorAll('.nav-link').forEach(x=>x.classList.toggle('active',x.dataset.view===view)); $('pageTitle').textContent=({dashboard:'Dashboard',vehicles:'Vehicles',customers:'Customers',rentals:'Reservations',receipts:'Receipts & invoices',contracts:'Rental contracts',calendar:'Calendar',reports:'Reports',settings:'Settings'})[view]||'Dashboard'; $('sidebar').classList.remove('open'); if(view==='calendar')renderCalendar(); if(view==='reports')renderReports(); }
+function go(view){ activeView=view; document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id==='view-'+view)); document.querySelectorAll('.nav-link').forEach(x=>x.classList.toggle('active',x.dataset.view===view)); $('pageTitle').textContent=({dashboard:'Dashboard',vehicles:'Vehicles',customers:'Customers',rentals:'Reservations',payments:'Payments',receipts:'Receipts & invoices',contracts:'Rental contracts',calendar:'Calendar',reports:'Reports',settings:'Settings'})[view]||'Dashboard'; $('sidebar').classList.remove('open'); if(view==='calendar')renderCalendar(); if(view==='reports')renderReports(); }
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.view)));
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
 $('mobileMenu').onclick=()=>$('sidebar').classList.toggle('open');
@@ -20,26 +21,32 @@ async function startApp(){ const {data:sessionData}=await db.auth.getSession(); 
 async function loadAll(){
  const [v,c,r,p]=await Promise.all([db.from('vehicles').select('*').order('created_at',{ascending:false}),db.from('customers').select('*').order('created_at',{ascending:false}),db.from('reservations').select('*').order('created_at',{ascending:false}),db.from('payments').select('*')]);
  for(const result of [v,c,r,p]) if(result.error){toast('Database error: '+result.error.message);return;}
- data.payments=p.data.map(x=>({id:x.id,reservationId:x.reservation_id,amount:Number(x.amount||0),date:x.payment_date,method:x.payment_method||'—'}));
+ data.payments=p.data.map(x=>({id:x.id,reservationId:x.reservation_id,amount:Number(x.amount||0),date:x.payment_date,recordedAt:x.created_at||null,method:x.payment_method||'—',reference:x.reference_number||x.notes||''}));
  data.vehicles=v.data.map(x=>({id:x.id,name:x.make_model,plate:x.plate_number,rate:Number(x.daily_rate),status:x.status==='active'?'Available':x.status==='maintenance'?'Maintenance':'Inactive',notes:x.notes||''}));
  data.customers=c.data.map(x=>({id:x.id,name:x.full_name,phone:x.phone||'',email:x.email||'',address:x.address||'',notes:x.notes||''}));
  data.rentals=r.data.map(x=>{const paid=p.data.filter(y=>y.reservation_id===x.id).reduce((s,y)=>s+Number(y.amount||0),0);return {id:x.id,invoice:x.invoice_number,customerId:x.customer_id,vehicleId:x.vehicle_id,delivery:x.pickup_date,returnDate:x.return_date,days:Number(x.rental_days),rate:Number(x.daily_rate),deliveryFee:Number(x.delivery_fee||0),carwashFee:Number(x.other_charges||0),reservationFee:paid,status:x.status.charAt(0).toUpperCase()+x.status.slice(1),notes:x.notes||'',total:Number(x.total_amount),balance:Math.max(0,Number(x.total_amount)-paid)};});
 }
 async function saveVehicle(item){const row={make_model:item.name,plate_number:item.plate, daily_rate:item.rate,status:item.status==='Available'?'active':item.status==='Maintenance'?'maintenance':'inactive',notes:item.notes};return db.from('vehicles').upsert(item.id?{id:item.id,...row}:row).select().single();}
 async function saveCustomer(item){const row={full_name:item.name,phone:item.phone,email:item.email,address:item.address,notes:item.notes||''};return db.from('customers').upsert(item.id?{id:item.id,...row}:row).select().single();}
-async function saveRental(item){const row={customer_id:item.customerId,vehicle_id:item.vehicleId,pickup_date:item.delivery,return_date:item.returnDate,daily_rate:item.rate,rental_days:item.days,delivery_fee:item.deliveryFee,other_charges:item.carwashFee,discount:0,status:item.status.toLowerCase(),notes:item.notes||''};const result=await db.from('reservations').upsert(item.id?{id:item.id,...row}:row).select().single();if(result.error)return result; if(!item.id&&item.reservationFee>0){const payment=await db.from('payments').insert({reservation_id:result.data.id,amount:item.reservationFee,payment_method:'Cash',payment_date:new Date().toISOString().slice(0,10),notes:'Initial reservation payment'});if(payment.error)return payment;}return result;}
+async function saveRental(item){
+ const row={customer_id:item.customerId,vehicle_id:item.vehicleId,pickup_date:item.delivery,return_date:item.returnDate,daily_rate:item.rate,rental_days:item.days,delivery_fee:item.deliveryFee,other_charges:item.carwashFee,discount:0,status:item.status.toLowerCase(),notes:item.notes||''};
+ return db.from('reservations').upsert(item.id?{id:item.id,...row}:row).select().single();
+}
+
 function field(label,name,type='text',value='',opts={}){let input='';if(type==='select')input=`<select name="${name}" required>${opts.options.map(o=>`<option value="${esc(o.value)}" ${String(value)===String(o.value)?'selected':''}>${esc(o.label)}</option>`).join('')}</select>`;else if(type==='textarea')input=`<textarea name="${name}" rows="3" ${opts.required===false?'':'required'}>${esc(value)}</textarea>`;else input=`<input name="${name}" type="${type}" value="${esc(value)}" ${opts.required===false?'':'required'} ${opts.min!==undefined?`min="${opts.min}"`:''} ${opts.step?`step="${opts.step}"`:''} ${opts.placeholder?`placeholder="${esc(opts.placeholder)}"`:''}>`;return `<label class="field${opts.full?' full':''}">${label}${input}</label>`;}
 function findRecord(type,id){return (type==='vehicle'?data.vehicles:type==='customer'?data.customers:data.rentals).find(x=>x.id===id)||{};}
 function openForm(type,id=null){formType=type;editId=id;const r=id?findRecord(type,id):{};const fields=$('dialogFields');$('dialogTitle').textContent=({vehicle:id?'Edit vehicle':'Add vehicle',customer:id?'Edit customer':'Add customer',rental:id?'Edit reservation':'New reservation'})[type];
  if(type==='vehicle')fields.innerHTML=field('Vehicle name / model','name','text',r.name||'',{full:true,placeholder:'e.g. Toyota Vios 2022'})+field('Plate number','plate','text',r.plate||'')+field('Daily rental rate (PHP)','rate','number',r.rate??'',{min:0,step:'0.01'})+field('Status','status','select',r.status||'Available',{options:['Available','Maintenance','Inactive'].map(x=>({value:x,label:x}))})+field('Notes','notes','textarea',r.notes||'',{full:true,required:false});
  if(type==='customer')fields.innerHTML=field('Customer full name','name','text',r.name||'',{full:true})+field('Contact number','phone','tel',r.phone||'')+field('Email address','email','email',r.email||'',{required:false})+field('Address','address','textarea',r.address||'',{full:true,required:false});
- if(type==='rental'){if(!data.vehicles.length||!data.customers.length){toast('Add at least one vehicle and one customer first.');return;}const vs=data.vehicles.filter(v=>v.status==='Available'||v.id===r.vehicleId).map(v=>({value:v.id,label:v.name+' — '+v.plate}));const cs=data.customers.map(c=>({value:c.id,label:c.name}));fields.innerHTML=field('Customer','customerId','select',r.customerId||cs[0].value,{options:cs})+field('Vehicle','vehicleId','select',r.vehicleId||vs[0]?.value,{options:vs})+field('Pickup date','delivery','date',r.delivery||new Date().toISOString().slice(0,10))+field('Return date','returnDate','date',r.returnDate||new Date(Date.now()+86400000).toISOString().slice(0,10))+field('Daily rental rate (PHP)','rate','number',r.rate??(data.vehicles.find(v=>v.id===(r.vehicleId||vs[0]?.value))?.rate||0),{min:0,step:'0.01'})+field('Delivery / pickup fee','deliveryFee','number',r.deliveryFee??0,{min:0,step:'0.01'})+field('Other charges / carwash','carwashFee','number',r.carwashFee??0,{min:0,step:'0.01'})+field('Payment received','reservationFee','number',r.reservationFee??0,{min:0,step:'0.01'})+field('Rental status','status','select',r.status||'Reserved',{options:['Reserved','Ongoing','Completed','Cancelled'].map(x=>({value:x,label:x}))})+field('Additional note','notes','textarea',r.notes||'',{full:true,required:false});}
+ if(type==='rental'){if(!data.vehicles.length||!data.customers.length){toast('Add at least one vehicle and one customer first.');return;}const vs=data.vehicles.filter(v=>v.status==='Available'||v.id===r.vehicleId).map(v=>({value:v.id,label:v.name+' — '+v.plate}));const cs=data.customers.map(c=>({value:c.id,label:c.name}));fields.innerHTML=field('Customer','customerId','select',r.customerId||cs[0].value,{options:cs})+field('Vehicle','vehicleId','select',r.vehicleId||vs[0]?.value,{options:vs})+field('Pickup date','delivery','date',r.delivery||new Date().toISOString().slice(0,10))+field('Return date','returnDate','date',r.returnDate||new Date(Date.now()+86400000).toISOString().slice(0,10))+field('Daily rental rate (PHP)','rate','number',r.rate??(data.vehicles.find(v=>v.id===(r.vehicleId||vs[0]?.value))?.rate||0),{min:0,step:'0.01'})+field('Delivery / pickup fee','deliveryFee','number',r.deliveryFee??0,{min:0,step:'0.01'})+field('Other charges / carwash','carwashFee','number',r.carwashFee??0,{min:0,step:'0.01'})+field('Rental status','status','select',r.status||'Reserved',{options:['Reserved','Ongoing','Completed','Cancelled'].map(x=>({value:x,label:x}))})+field('Additional note','notes','textarea',r.notes||'',{full:true,required:false});}
  $('formDialog').showModal();}
 $('addVehicleBtn').onclick=()=>openForm('vehicle');$('addCustomerBtn').onclick=()=>openForm('customer');$('addRentalBtn').onclick=()=>openForm('rental');$('closeDialog').onclick=$('cancelDialog').onclick=()=>$('formDialog').close();
 $('recordForm').addEventListener('submit',async e=>{e.preventDefault();const val=Object.fromEntries(new FormData(e.currentTarget));const id=editId;let result;
  if(formType==='vehicle'){const item={id,name:val.name.trim(),plate:val.plate.trim().toUpperCase(),rate:Number(val.rate),status:val.status,notes:val.notes||''};if(data.vehicles.some(x=>x.plate.toLowerCase()===item.plate.toLowerCase()&&x.id!==id)){toast('That plate number is already registered.');return;}result=await saveVehicle(item);}
  if(formType==='customer')result=await saveCustomer({id,name:val.name.trim(),phone:val.phone.trim(),email:val.email.trim(),address:val.address.trim()});
- if(formType==='rental'){const start=new Date(val.delivery+'T00:00:00'),end=new Date(val.returnDate+'T00:00:00');if(end<start){toast('Return date cannot be earlier than pickup date.');return;}const days=Math.max(1,Math.ceil((end-start)/86400000));const item={id,customerId:val.customerId,vehicleId:val.vehicleId,delivery:val.delivery,returnDate:val.returnDate,days,rate:Number(val.rate),deliveryFee:Number(val.deliveryFee||0),carwashFee:Number(val.carwashFee||0),reservationFee:Number(val.reservationFee||0),status:val.status,notes:val.notes||''};result=await saveRental(item);}
+ if(formType==='rental'){const start=new Date(val.delivery+'T00:00:00'),end=new Date(val.returnDate+'T00:00:00');if(end<start){toast('Return date cannot be earlier than pickup date.');return;}const days=Math.max(1,Math.ceil((end-start)/86400000));const item={id,customerId:val.customerId,vehicleId:val.vehicleId,delivery:val.delivery,returnDate:val.returnDate,days,rate:Number(val.rate),deliveryFee:Number(val.deliveryFee||0),carwashFee:Number(val.carwashFee||0),status:val.status,notes:val.notes||''};result=await saveRental(item);}
+ if(formType==='payment'){result=await recordPayment(val);}
+ if(formType==='paymentEdit'){result=await updatePayment(val);}
  if(result?.error){toast(result.error.message.includes('no_overlapping_vehicle_reservations')?'This vehicle already has a reservation during those dates.':result.error.message);return;} $('formDialog').close();await loadAll();renderAll();toast('Record saved to shared database.');});
 function customerName(id){return data.customers.find(x=>x.id===id)?.name||'Unknown customer';}function vehicleName(id){const v=data.vehicles.find(x=>x.id===id);return v?v.name+' · '+v.plate:'Unknown vehicle';}
 function table(headers,rows){return rows.length?`<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`:'<div class="empty">No records found.</div>';}
@@ -52,17 +59,17 @@ function renderContracts(){
  $('contractList').innerHTML=table(['Reservation','Customer','Vehicle','Rental period','Status',''],list.map(r=>`<tr><td><b>${esc(r.invoice||'—')}</b></td><td>${esc(customerName(r.customerId))}</td><td>${esc(vehicleName(r.vehicleId))}</td><td>${dateLabel(r.delivery)} – ${dateLabel(r.returnDate)}</td><td>${esc(r.status)}</td><td><button class="action-link" onclick="printContract('${r.id}')">Generate / Print</button></td></tr>`));
 }
 function renderDashboard(){
- const today=new Date().toISOString().slice(0,10);
+ const today=localDateKey();
  const ongoing=data.rentals.filter(r=>r.status==='Ongoing').length, reserved=data.rentals.filter(r=>r.status==='Reserved').length;
  const maintenance=data.vehicles.filter(v=>v.status==='Maintenance').length;
  $('statVehicles').textContent=data.vehicles.length;$('statAvailable').textContent=data.vehicles.filter(v=>v.status==='Available').length;$('statCustomers').textContent=data.customers.length;$('statRentals').textContent=data.rentals.length;
  const upcoming=data.rentals.filter(r=>r.status!=='Cancelled'&&r.returnDate>=today).sort((a,b)=>a.returnDate.localeCompare(b.returnDate)).slice(0,6);
  const outstanding=data.rentals.reduce((s,r)=>s+r.balance,0);
- $('dashboardStatuses').innerHTML=`<article class="status-tile"><span>Reserved</span><b>${reserved}</b></article><article class="status-tile"><span>Ongoing</span><b>${ongoing}</b></article><article class="status-tile"><span>Maintenance</span><b>${maintenance}</b></article><article class="status-tile"><span>Outstanding balances</span><b>${peso(outstanding)}</b></article><article class="status-tile"><span>Payments received today</span><b>${peso(data.payments.filter(x=>x.date===today).reduce((s,x)=>s+x.amount,0))}</b></article>`;
+ $('dashboardStatuses').innerHTML=`<article class="status-tile"><span>Reserved</span><b>${reserved}</b></article><article class="status-tile"><span>Ongoing</span><b>${ongoing}</b></article><article class="status-tile"><span>Maintenance</span><b>${maintenance}</b></article><article class="status-tile"><span>Outstanding balances</span><b>${peso(outstanding)}</b></article><article class="status-tile"><span>Payments received today</span><b>${peso(data.payments.filter(x=>x.recordedAt&&localDateKey(new Date(x.recordedAt))===today).reduce((s,x)=>s+x.amount,0))}</b></article>`;
  const recent=data.rentals.slice(0,5);$('recentRentals').innerHTML=recent.length?table(['Invoice','Customer','Vehicle','Status'],recent.map(r=>`<tr><td><b>${esc(r.invoice)}</b></td><td>${esc(customerName(r.customerId))}</td><td>${esc(vehicleName(r.vehicleId))}</td><td>${esc(r.status)}</td></tr>`)):'<div class="empty">No reservations yet. Add your first reservation to get started.</div>';
  const old=$('upcomingReturns');if(old)old.innerHTML=upcoming.length?table(['Return date','Vehicle','Customer'],upcoming.map(r=>`<tr><td>${dateLabel(r.returnDate)}</td><td>${esc(vehicleName(r.vehicleId))}</td><td>${esc(customerName(r.customerId))}</td></tr>`)):'<div class="empty">No upcoming returns.</div>';
 }
-function renderAll(){renderDashboard();renderVehicles();renderCustomers();renderRentals();renderReceipts();renderContracts();}
+function renderAll(){renderDashboard();renderVehicles();renderCustomers();renderRentals();renderReceipts();renderContracts();renderPayments();}
 async function deleteRecord(type,id){if(!confirm('Delete this record?'))return;let result;if(type==='vehicle')result=await db.from('vehicles').delete().eq('id',id);else if(type==='customer')result=await db.from('customers').delete().eq('id',id);else result=await db.from('reservations').delete().eq('id',id);if(result.error){toast(result.error.message);return;}await loadAll();renderAll();toast('Record deleted from shared database.');}
 function printReceipt(id){
  const r=data.rentals.find(x=>x.id===id);if(!r)return;
@@ -146,6 +153,87 @@ $('saveSettings').onclick=()=>toast('Business details are currently kept in this
 $('exportData').onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='haj-car-rentals-backup.json';a.click();URL.revokeObjectURL(a.href);};
 $('importData').onchange=()=>toast('Import is not enabled in the shared database version yet.');$('clearData').onclick=()=>toast('For safety, clearing all shared records is disabled. Delete individual records instead.');
 
+function paymentStatus(r){return r.balance<=0.005?'Paid':r.reservationFee>0?'Partially Paid':'Unpaid';}
+function openPaymentForm(reservationId){
+ const r=data.rentals.find(x=>x.id===reservationId);if(!r)return;
+ if(r.balance<=0.005){toast('This reservation is already fully paid.');return;}
+ formType='payment';editId=null;
+ $('dialogTitle').textContent='Record payment';
+ $('dialogFields').innerHTML=`<input type="hidden" name="reservationId" value="${esc(reservationId)}"><div class="field full"><b>${esc(r.invoice)} — ${esc(customerName(r.customerId))}</b><span class="muted">Remaining balance: ${peso(r.balance)}</span></div>`+
+ field('Amount received (PHP)','amount','number',r.balance,{min:0.01,step:'0.01'})+
+ field('Payment method','paymentMethod','select','Cash',{options:['Cash','GCash','Bank transfer','Other'].map(x=>({value:x,label:x}))})+
+ field('Payment date','paymentDate','date',localDateKey())+
+ field('Reference / note','paymentNote','text','',{required:false,full:true});
+ $('formDialog').showModal();
+}
+function openEditPayment(paymentId){
+ const p=data.payments.find(x=>x.id===paymentId);if(!p)return;
+ const r=data.rentals.find(x=>x.id===p.reservationId);if(!r)return;
+ formType='paymentEdit';editId=paymentId;
+ $('dialogTitle').textContent='Edit payment';
+ $('dialogFields').innerHTML=`<div class="field full"><b>${esc(r.invoice)} — ${esc(customerName(r.customerId))}</b><span class="muted">Recorded: ${p.recordedAt?new Date(p.recordedAt).toLocaleString('en-PH'):'Date not available'}</span></div>`+
+ field('Amount received (PHP)','amount','number',p.amount,{min:0.01,step:'0.01'})+
+ field('Payment method','paymentMethod','select',p.method,{options:['Cash','GCash','Bank transfer','Other'].map(x=>({value:x,label:x}))})+
+ field('Payment date','paymentDate','date',p.date||localDateKey())+
+ field('Reference / note','paymentNote','text',p.reference||'',{required:false,full:true});
+ $('formDialog').showModal();
+}
+async function markFullyPaid(reservationId){
+ const r=data.rentals.find(x=>x.id===reservationId);if(!r||r.balance<=0.005)return;
+ if(!confirm(`Record ${peso(r.balance)} as the final payment for ${r.invoice}?`))return;
+ const result=await db.from('payments').insert({reservation_id:r.id,amount:Number(r.balance.toFixed(2)),payment_method:'Cash',payment_date:localDateKey(),notes:'Marked as fully paid'});
+ if(result.error){toast('Could not record payment: '+result.error.message);return;}
+ await loadAll();renderAll();toast('Final payment recorded.');
+}
+async function recordPayment(values){
+ const r=data.rentals.find(x=>x.id===values.reservationId);
+ if(!r){toast('Please select a valid reservation.');return {error:{message:'Reservation not found.'}};}
+ const amount=Number(values.amount);
+ if(!Number.isFinite(amount)||amount<=0)return {error:{message:'Enter a payment amount greater than zero.'}};
+ if(amount>r.balance+0.005)return {error:{message:`Payment cannot exceed the remaining balance of ${peso(r.balance)}.`}};
+ return db.from('payments').insert({reservation_id:r.id,amount:Number(amount.toFixed(2)),payment_method:values.paymentMethod,payment_date:values.paymentDate||localDateKey(),reference_number:values.paymentNote||null,notes:values.paymentNote||null});
+}
+async function updatePayment(values){
+ const p=data.payments.find(x=>x.id===editId);
+ if(!p)return {error:{message:'Payment record not found. Refresh and try again.'}};
+ const r=data.rentals.find(x=>x.id===p.reservationId);
+ if(!r)return {error:{message:'The reservation for this payment could not be found.'}};
+ const amount=Number(values.amount);
+ const maximum=r.balance+p.amount;
+ if(!Number.isFinite(amount)||amount<=0)return {error:{message:'Enter a payment amount greater than zero.'}};
+ if(amount>maximum+0.005)return {error:{message:`This amount exceeds the available reservation balance. Maximum allowed: ${peso(maximum)}.`}};
+ return db.from('payments').update({amount:Number(amount.toFixed(2)),payment_method:values.paymentMethod,payment_date:values.paymentDate||p.date,reference_number:values.paymentNote||null,notes:values.paymentNote||null}).eq('id',p.id);
+}
+async function deletePayment(paymentId){
+ const p=data.payments.find(x=>x.id===paymentId);if(!p)return;
+ if(!confirm(`Delete this ${peso(p.amount)} payment? The reservation balance will increase by ${peso(p.amount)}.`))return;
+ const result=await db.from('payments').delete().eq('id',paymentId);
+ if(result.error){toast('Could not delete payment: '+result.error.message);return;}
+ await loadAll();renderAll();toast('Payment deleted and balance recalculated.');
+}
+function renderPayments(){
+ const root=$('paymentList');if(!root)return;
+ const q=($('paymentSearch').value||'').toLowerCase();
+ const list=data.rentals.filter(r=>r.status!=='Cancelled'&&(r.invoice+' '+customerName(r.customerId)+' '+vehicleName(r.vehicleId)).toLowerCase().includes(q));
+ $('paymentCount').textContent=`${list.length} reservation(s)`;
+ $('paymentList').innerHTML=table(['Invoice / Customer','Total','Received','Remaining','Payment status','Actions'],list.map(r=>{
+  const status=paymentStatus(r),history=data.payments.filter(p=>p.reservationId===r.id);
+  const actions=r.balance>0.005?`<button class="action-link" onclick="openPaymentForm('${r.id}')">Record payment</button><button class="action-link" onclick="markFullyPaid('${r.id}')">Mark fully paid</button>`:'<span class="status paid">Paid in full</span>';
+  return `<tr><td><b>${esc(r.invoice)}</b><br>${esc(customerName(r.customerId))}<br><span class="muted">${esc(vehicleName(r.vehicleId))} · ${history.length} payment(s)</span></td><td>${peso(r.total)}</td><td>${peso(r.reservationFee)}</td><td>${peso(r.balance)}</td><td><span class="status ${status==='Paid'?'paid':status==='Partially Paid'?'partial':'reserved'}">${status}</span></td><td><div class="row-actions">${actions}</div></td></tr>`;
+ }));
+ const historyRoot=$('paymentHistoryList');
+ if(historyRoot){
+  const transactions=data.payments.filter(p=>{
+   const r=data.rentals.find(x=>x.id===p.reservationId);
+   return r&&(r.invoice+' '+customerName(r.customerId)+' '+vehicleName(r.vehicleId)).toLowerCase().includes(q);
+  }).sort((a,b)=>(b.recordedAt||b.date||'').localeCompare(a.recordedAt||a.date||''));
+  historyRoot.innerHTML=table(['Payment date','Invoice / Customer','Method','Amount','Actions'],transactions.map(p=>{
+   const r=data.rentals.find(x=>x.id===p.reservationId);
+   const recorded=p.recordedAt?new Date(p.recordedAt).toLocaleString('en-PH'):'Legacy record';
+   return `<tr><td>${dateLabel(p.date)}<br><span class="muted">Recorded: ${esc(recorded)}</span></td><td><b>${esc(r.invoice)}</b><br>${esc(customerName(r.customerId))}</td><td>${esc(p.method)}</td><td>${peso(p.amount)}</td><td><div class="row-actions"><button class="action-link" onclick="openEditPayment('${p.id}')">Edit</button><button class="action-link delete" onclick="deletePayment('${p.id}')">Delete</button></div></td></tr>`;
+  }));
+ }
+}
 function renderCalendar(){
  const grid=$('calendarGrid');if(!grid)return;const mode=$('calendarMode').value;const y=calendarCursor.getFullYear(),m=calendarCursor.getMonth();
  let start,end,title;if(mode==='month'){start=new Date(y,m,1);const offset=(start.getDay()+6)%7;start.setDate(start.getDate()-offset);end=new Date(start);end.setDate(start.getDate()+41);title=calendarCursor.toLocaleDateString('en-PH',{month:'long',year:'numeric'});}else{start=new Date(calendarCursor);const offset=(start.getDay()+6)%7;start.setDate(start.getDate()-offset);end=new Date(start);end.setDate(start.getDate()+6);title=`${dateLabel(start.toISOString().slice(0,10))} – ${dateLabel(end.toISOString().slice(0,10))}`;}
@@ -153,13 +241,32 @@ function renderCalendar(){
  const names=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];grid.innerHTML=names.map(n=>`<div class="calendar-weekday">${n}</div>`).join('')+days.map(d=>{const key=d.toISOString().slice(0,10),items=data.rentals.filter(r=>r.status!=='Cancelled'&&r.delivery<=key&&r.returnDate>=key);return `<div class="calendar-day ${d.getMonth()!==m&&mode==='month'?'outside-month':''}"><b>${d.getDate()}</b>${items.map(r=>`<button class="calendar-event ${r.status.toLowerCase()}" title="${esc(customerName(r.customerId))}" onclick="openForm('rental','${r.id}')">${esc(vehicleName(r.vehicleId))}</button>`).join('')}</div>`;}).join('');
 }
 function renderReports(){
- if(!$('reportCards'))return;const period=$('reportPeriod').value,now=new Date();let from=new Date(now);if(period==='day')from.setHours(0,0,0,0);else if(period==='week'){from.setDate(now.getDate()-((now.getDay()+6)%7));from.setHours(0,0,0,0);}else if(period==='month'){from=new Date(now.getFullYear(),now.getMonth(),1);}else from=new Date(2000,0,1);const fromKey=from.toISOString().slice(0,10),toKey=now.toISOString().slice(0,10);
- const payments=data.payments.filter(p=>p.date>=fromKey&&p.date<=toKey),income=payments.reduce((s,p)=>s+p.amount,0),balance=data.rentals.reduce((s,r)=>s+r.balance,0),completed=data.rentals.filter(r=>r.status==='Completed').length,cancelled=data.rentals.filter(r=>r.status==='Cancelled').length;
- $('reportCards').innerHTML=[['Payments received',peso(income)],['Outstanding balances',peso(balance)],['Completed bookings',completed],['Cancelled bookings',cancelled]].map(x=>`<article class="report-card"><span>${x[0]}</span><b>${x[1]}</b></article>`).join('');
+ if(!$('reportCards'))return;
+ const period=$('reportPeriod').value,now=new Date();let from=new Date(now);
+ if(period==='day')from.setHours(0,0,0,0);
+ else if(period==='week'){from.setDate(now.getDate()-((now.getDay()+6)%7));from.setHours(0,0,0,0);}
+ else if(period==='month')from=new Date(now.getFullYear(),now.getMonth(),1);
+ else from=new Date(2000,0,1);
+ const fromKey=localDateKey(from),toKey=localDateKey(now);
+ const selectedPayments=data.payments.filter(p=>p.date&&p.date>=fromKey&&p.date<=toKey);
+ const income=selectedPayments.reduce((s,p)=>s+p.amount,0);
+ const allTime=data.payments.reduce((s,p)=>s+p.amount,0);
+ const todayKey=localDateKey();
+ const receivedToday=data.payments.filter(p=>p.recordedAt&&localDateKey(new Date(p.recordedAt))===todayKey).reduce((s,p)=>s+p.amount,0);
+ const balance=data.rentals.filter(r=>r.status!=='Cancelled').reduce((s,r)=>s+r.balance,0);
+ const completed=data.rentals.filter(r=>r.status==='Completed').length,cancelled=data.rentals.filter(r=>r.status==='Cancelled').length;
+ $('reportCards').innerHTML=[['Payments received (selected period)',peso(income)],['Received today (recorded today)',peso(receivedToday)],['Total received (all time)',peso(allTime)],['Outstanding balances',peso(balance)],['Completed bookings',completed],['Cancelled bookings',cancelled]].map(x=>`<article class="report-card"><span>${x[0]}</span><b>${x[1]}</b></article>`).join('');
  $('reservationReport').innerHTML=table(['Status','Bookings'],['Reserved','Ongoing','Completed','Cancelled'].map(s=>`<tr><td>${s}</td><td>${data.rentals.filter(r=>r.status===s).length}</td></tr>`));
  $('utilizationReport').innerHTML=table(['Vehicle','Bookings','Rental days'],data.vehicles.map(v=>{const rs=data.rentals.filter(r=>r.vehicleId===v.id&&r.status!=='Cancelled');return `<tr><td>${esc(v.name)} · ${esc(v.plate)}</td><td>${rs.length}</td><td>${rs.reduce((n,r)=>n+r.days,0)}</td></tr>`;}));
- const owing=data.rentals.filter(r=>r.balance>0);$('balanceReport').innerHTML=table(['Invoice','Customer','Balance'],owing.map(r=>`<tr><td>${esc(r.invoice)}</td><td>${esc(customerName(r.customerId))}</td><td>${peso(r.balance)}</td></tr>`));
+ const owing=data.rentals.filter(r=>r.status!=='Cancelled'&&r.balance>0.005);
+ $('balanceReport').innerHTML=table(['Invoice','Customer','Booking total','Received','Remaining'],owing.map(r=>`<tr><td>${esc(r.invoice)}</td><td>${esc(customerName(r.customerId))}</td><td>${peso(r.total)}</td><td>${peso(r.reservationFee)}</td><td>${peso(r.balance)}</td></tr>`));
+ $('paymentReport').innerHTML=table(['Payment date','Invoice','Customer','Method','Amount','Recorded at'],selectedPayments.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(p=>{
+  const r=data.rentals.find(x=>x.id===p.reservationId);
+  return `<tr><td>${dateLabel(p.date)}</td><td>${esc(r?.invoice||'Deleted reservation')}</td><td>${esc(r?customerName(r.customerId):'—')}</td><td>${esc(p.method)}</td><td>${peso(p.amount)}</td><td>${p.recordedAt?esc(new Date(p.recordedAt).toLocaleString('en-PH')):'Legacy record'}</td></tr>`;
+ }));
 }
 $('calendarPrev').onclick=()=>{calendarCursor.setDate(1);calendarCursor.setMonth(calendarCursor.getMonth()-1);renderCalendar();};$('calendarNext').onclick=()=>{calendarCursor.setDate(1);calendarCursor.setMonth(calendarCursor.getMonth()+1);renderCalendar();};$('calendarToday').onclick=()=>{calendarCursor=new Date();renderCalendar();};$('calendarMode').onchange=renderCalendar;$('reportPeriod').onchange=renderReports;
 
 (async()=>{const {data:auth}=await db.auth.getSession();if(auth.session)await startApp();else showLogin();})();
+
+$('paymentSearch').addEventListener('input',renderPayments);

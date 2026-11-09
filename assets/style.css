@@ -100,3 +100,5 @@
  body.printing-contract .contract-sign-grid{gap:17px 14px!important;margin-top:14px!important;font-size:8.5pt!important}
  body.printing-contract .contract-footer{margin-top:14px!important;font-size:7.5pt!important}
 }
+
+.payment-reservation{margin:14px 0;padding:16px}.payment-summary{display:flex;justify-content:space-between;gap:12px;align-items:center}.payment-totals{display:flex;gap:24px;flex-wrap:wrap;margin:14px 0}.payment-totals span{display:flex;gap:6px;color:var(--muted,#667085)}.payment-totals b{color:var(--text,#172033)}.payment-history{border-top:1px solid var(--border,#e5e7eb);padding-top:12px;margin-top:12px}.payment-history-row{display:grid;grid-template-columns:minmax(150px,1fr) auto auto;gap:14px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border,#e5e7eb)}.danger-text{color:#b42318!important}@media(max-width:650px){.payment-history-row{grid-template-columns:1fr auto}.payment-history-row .row-actions{grid-column:1/-1}.payment-totals{gap:10px 18px}}

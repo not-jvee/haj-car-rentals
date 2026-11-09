@@ -33,6 +33,7 @@
         <button class="nav-link" data-view="vehicles"><span>▣</span> Vehicles</button>
         <button class="nav-link" data-view="customers"><span>♙</span> Customers</button>
         <button class="nav-link" data-view="rentals"><span>▤</span> Reservations</button>
+        <button class="nav-link" data-view="payments"><span>₱</span> Payments</button>
         <button class="nav-link" data-view="calendar"><span>▦</span> Calendar</button>
         <button class="nav-link" data-view="reports"><span>▥</span> Reports</button>
         <button class="nav-link" data-view="receipts"><span>▧</span> Receipts</button>
@@ -92,6 +93,12 @@
         <section class="panel"><div class="toolbar"><input id="rentalSearch" class="search" placeholder="Search customer, vehicle, or invoice"><span class="result-count" id="rentalCount"></span></div><div id="rentalList"></div></section>
       </section>
 
+      <section class="view" id="view-payments">
+        <div class="section-head"><div><h2>Payment management</h2><p>Record partial payments or mark a reservation as fully paid.</p></div></div>
+        <section class="panel"><div class="toolbar"><input id="paymentSearch" class="search" placeholder="Search invoice, customer, or vehicle"><span class="result-count" id="paymentCount"></span></div><div id="paymentList"></div></section>
+        <section class="panel report-panel"><h3>Payment transaction history</h3><p class="muted">Edit or delete individual transactions here. The reservation balance and reports recalculate from the saved transactions.</p><div id="paymentHistoryList"></div></section>
+      </section>
+
       <section class="view" id="view-calendar">
         <div class="section-head"><div><h2>Rental calendar</h2><p>View vehicle reservations by month or week.</p></div><div class="calendar-controls"><button class="btn secondary" id="calendarPrev">‹</button><strong id="calendarTitle"></strong><button class="btn secondary" id="calendarNext">›</button><select id="calendarMode" aria-label="Calendar view"><option value="month">Month</option><option value="week">Week</option></select><button class="btn secondary" id="calendarToday">Today</button></div></div>
         <section class="panel"><div class="calendar-grid" id="calendarGrid"></div><div class="calendar-legend"><span class="reserved-dot">Reserved</span><span class="ongoing-dot">Ongoing</span><span class="completed-dot">Completed</span><span class="cancelled-dot">Cancelled</span></div></section>
@@ -102,6 +109,7 @@
         <section class="panel report-panel"><h3>Reservation summary</h3><div id="reservationReport"></div></section>
         <section class="panel report-panel"><h3>Vehicle utilization</h3><div id="utilizationReport"></div></section>
         <section class="panel report-panel"><h3>Outstanding balances</h3><div id="balanceReport"></div></section>
+        <section class="panel report-panel"><h3>Payment transactions for selected period</h3><div id="paymentReport"></div></section>
       </section>
       <section class="view" id="view-receipts">
         <div class="section-head"><div><h2>Receipts & invoices</h2><p>Open, print, or save a PDF copy of a rental receipt.</p></div></div>
