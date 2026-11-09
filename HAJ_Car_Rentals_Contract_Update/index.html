@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="HAJ Car Rentals management dashboard">
+  <title>HAJ Car Rentals | Management</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <section id="loginScreen" class="login-screen" style="display:none">
+    <form id="loginForm" class="login-card">
+      <div class="brand-logo login-logo">HAJ</div>
+      <p class="eyebrow">HAJ CAR RENTALS</p>
+      <h1>Welcome back</h1>
+      <p class="muted">Sign in using your shared business account.</p>
+      <label>Email address<input id="loginEmail" type="email" autocomplete="username" required placeholder="Business email"></label>
+      <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Password"></label>
+      <p id="loginError" class="login-error" role="alert"></p>
+      <button id="loginButton" class="btn primary" type="submit">Sign in</button>
+    </form>
+  </section>
+  <div id="appShell" style="display:none">
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#" aria-label="HAJ Car Rentals home">
+        <span class="brand-logo">HAJ</span>
+        <span><b>HAJ Car Rentals</b><small>Management</small></span>
+      </a>
+      <p class="nav-heading">MENU</p>
+      <nav class="navigation">
+        <button class="nav-link active" data-view="dashboard"><span>▦</span> Dashboard</button>
+        <button class="nav-link" data-view="vehicles"><span>▣</span> Vehicles</button>
+        <button class="nav-link" data-view="customers"><span>♙</span> Customers</button>
+        <button class="nav-link" data-view="rentals"><span>▤</span> Reservations</button>
+        <button class="nav-link" data-view="calendar"><span>▦</span> Calendar</button>
+        <button class="nav-link" data-view="reports"><span>▥</span> Reports</button>
+        <button class="nav-link" data-view="receipts"><span>▧</span> Receipts</button>
+        <button class="nav-link" data-view="contracts"><span>▤</span> Rental contracts</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="business-mini"><span class="online-dot"></span><span><b>Shared workspace</b><small id="signedInEmail">Connected to cloud</small></span></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button>
+        <div><p class="eyebrow">HAJ CAR RENTALS</p><h1 id="pageTitle">Dashboard</h1></div>
+        <div class="top-actions"><span class="today" id="todayLabel"></span><span class="user-avatar">H</span><button class="btn secondary signout-btn" id="logoutButton">Sign out</button></div>
+      </header>
+
+      <section class="view active" id="view-dashboard">
+        <div class="welcome">
+          <div><h2>Welcome to HAJ Car Rentals</h2><p>Here's what's happening with your rental business.</p></div>
+          <button class="btn primary" data-go="rentals">＋ New reservation</button>
+        </div>
+        <div class="stat-grid">
+          <article class="stat-card"><div class="stat-icon blue">▣</div><p>Total vehicles</p><strong id="statVehicles">0</strong><small>Registered in your fleet</small></article>
+          <article class="stat-card"><div class="stat-icon green">✓</div><p>Available vehicles</p><strong id="statAvailable">0</strong><small>Ready for rental</small></article>
+          <article class="stat-card"><div class="stat-icon violet">♙</div><p>Customers</p><strong id="statCustomers">0</strong><small>Saved customer records</small></article>
+          <article class="stat-card"><div class="stat-icon orange">₱</div><p>Rental records</p><strong id="statRentals">0</strong><small>All reservations</small></article>
+        </div>
+        <div class="status-overview" id="dashboardStatuses"></div>
+        <div class="dashboard-grid">
+          <section class="panel">
+            <div class="panel-heading"><div><h3>Recent reservations</h3><p>Your latest rental records</p></div><button class="text-button" data-go="rentals">View all →</button></div>
+            <div id="recentRentals" class="empty">No reservations yet. Add your first reservation to get started.</div>
+          </section>
+          <section class="panel tips-panel">
+            <div class="panel-heading"><div><h3>Quick actions</h3><p>Manage your daily operations</p></div></div>
+            <button class="quick-action" data-go="vehicles"><span class="quick-icon">▣</span><span><b>Add a vehicle</b><small>Register a vehicle and its rental rate</small></span><i>›</i></button>
+            <button class="quick-action" data-go="customers"><span class="quick-icon">♙</span><span><b>Add a customer</b><small>Save customer contact details</small></span><i>›</i></button>
+            <button class="quick-action" data-go="rentals"><span class="quick-icon">▤</span><span><b>Create a reservation</b><small>Record a rental schedule and charges</small></span><i>›</i></button>
+            <div class="info-note"><b>Good to know</b><p>Your information is synchronized through your shared HAJ account.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-vehicles">
+        <div class="section-head"><div><h2>Vehicle management</h2><p>Add and manage the vehicles available for rent.</p></div><button class="btn primary" id="addVehicleBtn">＋ Add vehicle</button></div>
+        <section class="panel"><div class="toolbar"><input id="vehicleSearch" class="search" placeholder="Search vehicle or plate number"><span class="result-count" id="vehicleCount"></span></div><div id="vehicleList"></div></section>
+      </section>
+
+      <section class="view" id="view-customers">
+        <div class="section-head"><div><h2>Customer management</h2><p>Keep customer names and contact information organized.</p></div><button class="btn primary" id="addCustomerBtn">＋ Add customer</button></div>
+        <section class="panel"><div class="toolbar"><input id="customerSearch" class="search" placeholder="Search customer name or phone"><span class="result-count" id="customerCount"></span></div><div id="customerList"></div></section>
+      </section>
+
+      <section class="view" id="view-rentals">
+        <div class="section-head"><div><h2>Reservations</h2><p>Record rental dates, vehicle assignments, and additional charges.</p></div><button class="btn primary" id="addRentalBtn">＋ New reservation</button></div>
+        <section class="panel"><div class="toolbar"><input id="rentalSearch" class="search" placeholder="Search customer, vehicle, or invoice"><span class="result-count" id="rentalCount"></span></div><div id="rentalList"></div></section>
+      </section>
+
+      <section class="view" id="view-calendar">
+        <div class="section-head"><div><h2>Rental calendar</h2><p>View vehicle reservations by month or week.</p></div><div class="calendar-controls"><button class="btn secondary" id="calendarPrev">‹</button><strong id="calendarTitle"></strong><button class="btn secondary" id="calendarNext">›</button><select id="calendarMode" aria-label="Calendar view"><option value="month">Month</option><option value="week">Week</option></select><button class="btn secondary" id="calendarToday">Today</button></div></div>
+        <section class="panel"><div class="calendar-grid" id="calendarGrid"></div><div class="calendar-legend"><span class="reserved-dot">Reserved</span><span class="ongoing-dot">Ongoing</span><span class="completed-dot">Completed</span><span class="cancelled-dot">Cancelled</span></div></section>
+      </section>
+      <section class="view" id="view-reports">
+        <div class="section-head"><div><h2>Business reports</h2><p>Review payments, balances, reservations, and fleet usage.</p></div><select id="reportPeriod"><option value="day">Today</option><option value="week">This week</option><option value="month" selected>This month</option><option value="all">All time</option></select></div>
+        <div class="report-cards" id="reportCards"></div>
+        <section class="panel report-panel"><h3>Reservation summary</h3><div id="reservationReport"></div></section>
+        <section class="panel report-panel"><h3>Vehicle utilization</h3><div id="utilizationReport"></div></section>
+        <section class="panel report-panel"><h3>Outstanding balances</h3><div id="balanceReport"></div></section>
+      </section>
+      <section class="view" id="view-receipts">
+        <div class="section-head"><div><h2>Receipts & invoices</h2><p>Open, print, or save a PDF copy of a rental receipt.</p></div></div>
+        <section class="panel"><div class="toolbar"><input id="receiptSearch" class="search" placeholder="Search invoice number or customer"><span class="result-count" id="receiptCount"></span></div><div id="receiptList"></div></section>
+      </section>
+
+      <section class="view" id="view-contracts">
+        <div class="section-head"><div><h2>Rental contracts</h2><p>Generate and print a rental agreement for a saved reservation.</p></div></div>
+        <section class="panel"><div class="toolbar"><span class="muted">Choose a reservation to generate its contract. Customer, vehicle, and rental dates are filled in automatically.</span></div><div id="contractList"></div></section>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="section-head"><div><h2>Settings & backup</h2><p>Manage your business details and keep a copy of your records.</p></div></div>
+        <section class="panel settings-panel">
+          <h3>Business information shown on receipts</h3>
+          <div class="form-grid">
+            <label>Business name<input id="settingName" value="HAJ Car Rentals"></label>
+            <label>Phone number<input id="settingPhone" value="0919 897 9752"></label>
+            <label>Email address<input id="settingEmail" value="haj.biz246@gmail.com"></label>
+            <label>Address<input id="settingAddress" value="Cebu City, Philippines 6000"></label>
+          </div>
+          <button class="btn primary" id="saveSettings">Save business details</button>
+          <hr>
+          <h3>Data backup</h3><p class="muted">Export your saved records as a JSON backup. Keep this file somewhere safe.</p>
+          <div class="button-row"><button class="btn secondary" id="exportData">↓ Export backup</button><label class="btn secondary upload-label">↑ Import backup<input type="file" id="importData" accept=".json,application/json" hidden></label><button class="btn danger-outline" id="clearData">Clear all data</button></div>
+          <div class="warning-note">Your business records are stored in Supabase and shared across devices using this account. Keep your login credentials private.</div>
+        </section>
+      </section>
+
+      <footer class="footer"><span>© <span id="year"></span> HAJ Car Rentals</span><button class="text-button" data-go="settings">Settings & backup</button></footer>
+    </main>
+  </div>
+  </div>
+
+  <dialog id="formDialog" class="dialog">
+    <form id="recordForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">HAJ CAR RENTALS</p><h2 id="dialogTitle">Add record</h2></div><button type="button" class="icon-button" id="closeDialog">×</button></div>
+      <div id="dialogFields" class="dialog-fields"></div>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="cancelDialog">Cancel</button><button type="submit" class="btn primary">Save record</button></div>
+    </form>
+  </dialog>
+
+  <div id="receiptPrint" class="print-area"></div>
+  <div id="contractPrint" class="print-area contract-print-area"></div>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/supabase.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
